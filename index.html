@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>のび太のおうち探検</title>
+</head>
+<body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kaisei+Decol:wght@400;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap">
+<style>
+  :root{
+    --bg:        #e8f2ff;
+    --surface:   #fffaf0;
+    --surface-2: #fff3d6;
+    --border:    rgba(255,180,80,.35);
+    --ink:       #3d3020;
+    --ink-dim:   #6b5a45;
+    --amber:     #ff9f1a;
+    --rose:      #ff6b6b;
+    --moon:      #4dabf7;
+    --font-display: 'Kaisei Decol', 'Hiragino Mincho ProN', serif;
+    --font-body:    'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', sans-serif;
+  }
+  *,*::before,*::after{
+    box-sizing:border-box;
+    -webkit-tap-highlight-color:transparent;
+    -webkit-touch-callout:none;
+    user-select:none;
+    touch-action:none;
+  }
+  html,body{
+    margin:0;padding:0;overflow:hidden;overscroll-behavior:none;
+    width:100%;height:100%;height:100dvh;
+    position:fixed;background:var(--bg);font-family:var(--font-body);
+  }
+  #gameCanvas{display:block;position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;z-index:0;touch-action:none;}
+
+  /* 昼の部屋。端はほんのりだけ影 */
+  #vignette{position:fixed;inset:0;z-index:5;pointer-events:none;
+    box-shadow:inset 0 0 12vw 4vw rgba(180,210,255,.18);}
+
+  #hud{position:fixed;top:max(16px, env(safe-area-inset-top));left:max(16px, env(safe-area-inset-left));color:var(--ink);z-index:10;pointer-events:none;text-shadow:0 1px 2px rgba(255,255,255,.8);}
+  #hud .counter{font-family:var(--font-body);font-size:17px;font-weight:700;background:rgba(255,250,240,.88);backdrop-filter:blur(2px);padding:9px 16px;border-radius:10px;border:1px solid var(--border);display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums;box-shadow:0 4px 16px rgba(120,90,40,.12);}
+
+  #crosshair{position:fixed;top:50%;left:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border:2px solid rgba(60,40,20,.75);border-radius:50%;z-index:10;pointer-events:none;box-shadow:0 0 2px rgba(255,255,255,.8);}
+
+  #minimapWrap{position:fixed;top:max(16px, env(safe-area-inset-top));right:max(16px, env(safe-area-inset-right));z-index:10;pointer-events:none;}
+  #minimap{background:rgba(255,252,245,.82);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 20px rgba(120,90,40,.15);}
+
+  #toast{position:fixed;top:80px;left:50%;transform:translateX(-50%) translateY(-10px);font-family:var(--font-body);font-weight:500;color:#5c3d00;background:rgba(255,248,220,.94);padding:9px 20px;border-radius:20px;font-size:15px;z-index:10;opacity:0;transition:opacity .35s ease, transform .35s ease;pointer-events:none;border:1px solid rgba(255,180,60,.45);box-shadow:0 4px 16px rgba(120,90,40,.15);}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  .overlay{position:fixed;inset:0;background:radial-gradient(ellipse at center,rgba(232,242,255,.92),rgba(255,243,210,.96));display:flex;align-items:center;justify-content:center;z-index:20;color:var(--ink);text-align:center;}
+  .panel{max-width:560px;padding:40px 44px;background:linear-gradient(180deg,var(--surface-2),var(--surface));border:1px solid var(--border);border-radius:18px;box-shadow:0 24px 70px rgba(120,90,40,.18), 0 0 90px -30px rgba(255,200,100,.35);animation:riseIn .5s cubic-bezier(.2,.8,.2,1) both;}
+  @keyframes riseIn{from{opacity:0;transform:translateY(14px) scale(.98);}to{opacity:1;transform:none;}}
+  @media (prefers-reduced-motion:reduce){.panel{animation:none;}}
+  .panel h1{margin:0 0 14px;font-family:var(--font-display);font-weight:700;font-size:30px;letter-spacing:.03em;text-wrap:balance;background:linear-gradient(90deg,var(--amber),var(--rose),var(--moon));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .panel p{margin:8px 0;color:var(--ink-dim);font-size:14.5px;line-height:1.8;text-wrap:balance;}
+  .keys{display:inline-block;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:6px;padding:2px 9px;margin:0 2px;font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--ink);}
+  .game-btn{
+    min-width:56px;min-height:56px;padding:0;border:none;border-radius:14px;
+    font-family:var(--font-body);font-size:22px;font-weight:700;color:var(--ink);
+    background:rgba(255,250,240,.82);border:2px solid var(--border);
+    box-shadow:0 4px 14px rgba(120,90,40,.14);
+    cursor:pointer;touch-action:manipulation;
+    transition:transform .08s ease, opacity .08s ease, filter .08s ease;
+  }
+  .game-btn:active,.game-btn.is-pressed{transform:scale(0.92);opacity:.88;}
+  #startBtn,#resumeBtn,#restartBtn{
+    margin-top:22px;padding:13px 34px;min-height:56px;
+    font-family:var(--font-body);font-size:16px;font-weight:700;color:#241a12;
+    background:linear-gradient(90deg,var(--amber),var(--rose));border:none;border-radius:30px;
+    cursor:pointer;box-shadow:0 8px 24px -6px rgba(255,150,120,.5);
+    transition:transform .08s ease, filter .08s ease;
+  }
+  #startBtn:active,#resumeBtn:active,#restartBtn:active{transform:scale(0.92);}
+  #startBtn:focus-visible,#resumeBtn:focus-visible,#restartBtn:focus-visible{outline:2px solid var(--moon);outline-offset:3px;}
+  #pauseOverlay,#winOverlay{display:none;}
+  .found{color:#c45c00;}
+  #virtual-controls{
+    position:fixed;inset:0;z-index:15;pointer-events:none;
+    padding-bottom:max(16px, env(safe-area-inset-bottom));
+    padding-left:max(12px, env(safe-area-inset-left));
+    padding-right:max(12px, env(safe-area-inset-right));
+  }
+  #virtual-controls.hidden{display:none;}
+  .touch-hint{
+    position:absolute;right:max(20px, env(safe-area-inset-right));bottom:max(150px, calc(env(safe-area-inset-bottom) + 130px));
+    color:rgba(60,40,20,.55);font-size:13px;font-weight:700;pointer-events:none;text-align:right;line-height:1.5;
+  }
+  .dpad{
+    position:absolute;left:max(16px, env(safe-area-inset-left));bottom:max(16px, env(safe-area-inset-bottom));
+    display:grid;grid-template-columns:56px 56px 56px;grid-template-rows:56px 56px 56px;gap:8px;pointer-events:auto;
+  }
+  .dpad .spacer{pointer-events:none;}
+  #cv-up{grid-column:2;grid-row:1;}
+  #cv-left{grid-column:1;grid-row:2;}
+  #cv-right{grid-column:3;grid-row:2;}
+  #cv-down{grid-column:2;grid-row:3;}
+  #pauseBtn{
+    position:absolute;right:max(16px, env(safe-area-inset-right));
+    bottom:max(210px, calc(env(safe-area-inset-bottom) + 190px));
+    width:56px;height:56px;font-size:20px;pointer-events:auto;
+  }
+  @media (pointer:fine){
+    #virtual-controls{display:none;}
+  }
+</style>
+
+<div id="vignette"></div>
+
+<div id="hud" style="display:none;">
+  <div class="counter">📦 大切なもの: <span id="itemCount">0</span> / <span id="itemTotal">6</span></div>
+</div>
+<div id="crosshair" style="display:none;"></div>
+<div id="toast"></div>
+
+<div class="overlay" id="startOverlay">
+  <div class="panel">
+    <h1>🏠 のび太のおうち探検</h1>
+    <p>明るいおうちの中を歩き回って、<strong>散らばった大切なもの</strong>を6個そろえよう。<br>リビング・キッチン・廊下・寝室・浴室・書斎……どこに落ちてるかな？</p>
+    <p id="controlHelpDesktop"><span class="keys">W</span><span class="keys">A</span><span class="keys">S</span><span class="keys">D</span> または矢印キーで移動 ／ マウスで見回す ／ <span class="keys">Esc</span>で一時停止</p>
+    <p id="controlHelpTouch" style="display:none;">左下の矢印で歩く ／ 画面右半分をなぞって見回す ／ ⏸で一時停止</p>
+    <button id="startBtn" class="game-btn">タップしてはじめる</button>
+  </div>
+</div>
+
+<div class="overlay" id="pauseOverlay">
+  <div class="panel">
+    <h1>一時停止中</h1>
+    <p>いつでも再開できるよ。</p>
+    <button id="resumeBtn" class="game-btn">再開する</button>
+  </div>
+</div>
+
+<div class="overlay" id="winOverlay">
+  <div class="panel">
+    <h1>🎉 お片付け完了！</h1>
+    <p class="found">散らばっていた大切なものを6個、全部見つけたよ！<br>これで安心して出かけられるね。</p>
+    <button id="restartBtn" class="game-btn">もう一度あそぶ</button>
+  </div>
+</div>
+
+<div id="virtual-controls" class="hidden" aria-hidden="true">
+  <div class="touch-hint">右半分を<br>なぞって見回す</div>
+  <div class="dpad">
+    <button type="button" class="game-btn" id="cv-up" aria-label="前">↑</button>
+    <button type="button" class="game-btn" id="cv-left" aria-label="左">←</button>
+    <button type="button" class="game-btn" id="cv-right" aria-label="右">→</button>
+    <button type="button" class="game-btn" id="cv-down" aria-label="後">↓</button>
+  </div>
+  <button type="button" class="game-btn" id="pauseBtn" aria-label="一時停止">⏸</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+<div id="minimapWrap" style="display:none;"><canvas id="minimap" width="180" height="140"></canvas></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+const isTouchPreferred = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+
+/* ================= 基本セットアップ ================= */
+const canvas = document.getElementById('gameCanvas');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xe8f0ff);
+scene.fog = new THREE.FogExp2(0xe8f0ff, 0.012);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
+camera.rotation.order = 'YXZ';
+
+const renderer = new THREE.WebGLRenderer({canvas, antialias:!isTouchPreferred});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouchPreferred ? 1 : 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = false;
+
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ================= ライティング ================= */
+scene.add(new THREE.AmbientLight(0xfff8ee, 0.72));
+const hemi = new THREE.HemisphereLight(0xdceeff, 0xfff0d0, 0.55);
+scene.add(hemi);
+
+const sun = new THREE.DirectionalLight(0xfff4d6, 0.85);
+sun.position.set(6, 10, 2);
+if (renderer.shadowMap.enabled){
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  sun.shadow.camera.left = -10;
+  sun.shadow.camera.right = 10;
+  sun.shadow.camera.top = 10;
+  sun.shadow.camera.bottom = -10;
+}
+scene.add(sun);
+
+function warmLamp(x,y,z,color,intensity,dist){
+  const l = new THREE.PointLight(color, intensity, dist, 2);
+  l.position.set(x,y,z);
+  if (renderer.shadowMap.enabled){
+    l.castShadow = true;
+    l.shadow.mapSize.set(512,512);
+  }
+  scene.add(l);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.08,8,8), new THREE.MeshBasicMaterial({color:color}));
+  bulb.position.set(x,y,z);
+  scene.add(bulb);
+  return l;
+}
+
+/* ================= マテリアル ================= */
+const mat = (color, rough=0.85, metal=0.0)=> new THREE.MeshStandardMaterial({color, roughness:rough, metalness:metal});
+
+const floorMats = {
+  living:  mat(0xd4a96a),
+  kitchen: mat(0xc9b07a),
+  hallway: mat(0xd8c090),
+  bedroom: mat(0xe8c878),
+  bathroom:mat(0xd0ddd8, 0.5),
+  study:   mat(0xd4b080)
+};
+const wallMat = mat(0xfff3d6, 0.92);
+const ceilMat = mat(0xfffaf0, 1.0);
+
+/* ================= ルーム / 壁 / 当たり判定 定義 =================
+   間取り（footprint 16 x 12）
+   living:   x 0-8,  z 0-6
+   kitchen:  x 8-16, z 0-6
+   hallway:  x 0-16, z 6-7
+   bedroom:  x 0-7,  z 7-12
+   bathroom: x 7-10, z 7-12
+   study:    x 10-16,z 7-12
+*/
+const H = 3;          // 壁の高さ
+const T = 0.25;       // 壁の厚み
+const colliders = []; // {minX,maxX,minZ,maxZ}
+
+function addWallBox(cx, cz, sx, sz, color){
+  const geo = new THREE.BoxGeometry(sx, H, sz);
+  const m = new THREE.Mesh(geo, wallMat);
+  m.position.set(cx, H/2, cz);
+  m.castShadow = false; m.receiveShadow = false;
+  scene.add(m);
+  colliders.push({minX:cx-sx/2-0.05, maxX:cx+sx/2+0.05, minZ:cz-sz/2-0.05, maxZ:cz+sz/2+0.05});
+}
+
+// axis: 'x' -> 壁はZ方向に伸びる(壁面はX一定)。 axis: 'z' -> 壁はX方向に伸びる(壁面はZ一定)
+function wallLine(axis, fixed, from, to, gapFrom, gapTo){
+  const segs = [];
+  if (gapFrom === undefined){ segs.push([from,to]); }
+  else{
+    if (gapFrom > from) segs.push([from, gapFrom]);
+    if (to > gapTo) segs.push([gapTo, to]);
+  }
+  segs.forEach(([a,b])=>{
+    if (b-a <= 0.001) return;
+    const mid = (a+b)/2, len = (b-a) + T;
+    if (axis === 'z'){ // 壁面 z=fixed、X方向に伸びる
+      addWallBox(mid, fixed, len, T);
+    } else { // 壁面 x=fixed、Z方向に伸びる
+      addWallBox(fixed, mid, T, len);
+    }
+  });
+}
+
+// 外壁
+wallLine('z', 0,  0, 16, 3, 5);      // 南壁（玄関ドア）
+wallLine('z', 12, 0, 16);            // 北壁
+wallLine('x', 0,  0, 12);            // 西壁
+wallLine('x', 16, 0, 12);            // 東壁
+
+// 間仕切り
+wallLine('x', 8, 0, 6);                 // リビング/キッチン
+wallLine('z', 6, 0, 8, 3, 5);           // リビング/廊下
+wallLine('z', 6, 8, 16, 11, 13);        // キッチン/廊下
+wallLine('z', 7, 0, 7, 2.5, 4);         // 廊下/寝室
+wallLine('z', 7, 7, 10, 7.75, 9.25);    // 廊下/浴室
+wallLine('z', 7, 10, 16, 12, 13.5);     // 廊下/書斎
+wallLine('x', 7, 7, 12);                // 寝室/浴室
+wallLine('x', 10, 7, 12);               // 浴室/書斎
+
+/* ================= 床・天井 ================= */
+function panel(x1,z1,x2,z2, material, y, rotX){
+  const w = x2-x1, d = z2-z1;
+  const geo = new THREE.PlaneGeometry(w, d);
+  const m = new THREE.Mesh(geo, material);
+  m.rotation.x = rotX;
+  m.position.set((x1+x2)/2, y, (z1+z2)/2);
+  m.receiveShadow = true;
+  scene.add(m);
+}
+panel(0,0,8,6, floorMats.living, 0, -Math.PI/2);
+panel(8,0,16,6, floorMats.kitchen, 0, -Math.PI/2);
+panel(0,6,16,7, floorMats.hallway, 0, -Math.PI/2);
+panel(0,7,7,12, floorMats.bedroom, 0, -Math.PI/2);
+panel(7,7,10,12, floorMats.bathroom, 0, -Math.PI/2);
+panel(10,7,16,12, floorMats.study, 0, -Math.PI/2);
+panel(0,0,16,12, ceilMat, H, Math.PI/2);
+
+/* ================= 家具（見た目 + 当たり判定） ================= */
+function furniture(x,z,sx,sy,sz,color,opts){
+  opts = opts || {};
+  const geo = new THREE.BoxGeometry(sx,sy,sz);
+  const m = new THREE.Mesh(geo, mat(color, opts.rough||0.8, opts.metal||0));
+  m.position.set(x, sy/2 + (opts.yOff||0), z);
+  m.castShadow = false; m.receiveShadow = false;
+  scene.add(m);
+  if (!opts.noCollide){
+    colliders.push({minX:x-sx/2, maxX:x+sx/2, minZ:z-sz/2, maxZ:z+sz/2});
+  }
+  return m;
+}
+function cyl(x,z,r,h,color){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,16), mat(color));
+  m.position.set(x,h/2,z);
+  m.castShadow = true;
+  scene.add(m);
+  colliders.push({minX:x-r,maxX:x+r,minZ:z-r,maxZ:z+r});
+}
+
+// --- リビング ---
+furniture(2, 4.6, 2.6, 0.75, 1.0, 0x7ec8e3);       // ソファ（水色）
+furniture(2, 3.2, 1.1, 0.4, 0.6, 0xc9a66b);         // ローテーブル
+furniture(5.7, 1, 1.6, 1.2, 0.5, 0xf0e8d8);         // テレビ台
+furniture(5.7, 1, 1.3, 1.1, 0.08, 0x88c9ff, {yOff:1.3, noCollide:true}); // 画面
+warmLamp(1.5, 2.2, 1.2, 0xfff0cc, 0.55, 8);
+
+// --- キッチン ---
+furniture(14.5, 1, 1.2, 0.9, 3.6, 0xf5f0e8);        // キッチンカウンター
+furniture(10.5, 3.5, 2.2, 0.75, 1.1, 0xe8c878);     // ダイニングテーブル
+cyl(9.6, 2.7, 0.22, 0.8, 0xc9a66b);
+cyl(11.4, 2.7, 0.22, 0.8, 0xc9a66b);
+cyl(9.6, 4.3, 0.22, 0.8, 0xc9a66b);
+cyl(11.4, 4.3, 0.22, 0.8, 0xc9a66b);
+furniture(15.4, 5.2, 0.8, 1.8, 0.7, 0xf8f8f8, {metal:0.3, rough:0.4}); // 冷蔵庫
+warmLamp(11, 4.2, 0.9, 0xfff4d0, 0.45, 7);
+
+// --- 廊下 ---
+cyl(1.0, 6.5, 0.25, 1.1, 0x7ec87a);
+warmLamp(8, 2.4, 6.5, 0xfff8e8, 0.35, 6);
+
+// --- 寝室（のび太の部屋風） ---
+furniture(2.2, 10, 2.6, 0.6, 3.6, 0xf5c842);        // ベッド（黄色布団）
+furniture(0.9, 8.4, 0.6, 0.5, 0.6, 0xe8c878);       // ナイトスタンド
+furniture(5.8, 10.5, 1.0, 1.9, 0.6, 0xf0e0c0);      // ワードローブ
+furniture(5.5, 8.2, 1.4, 0.72, 0.8, 0xd4a96a);      // 勉強机
+furniture(5.5, 8.0, 0.5, 0.35, 0.7, 0xff6b6b, {yOff:0.72, noCollide:true}); // 赤い鉛筆立て
+furniture(4.8, 8.5, 0.35, 0.08, 0.25, 0x4dabf7, {yOff:0.74, noCollide:true}); // 漫画
+furniture(6.2, 8.3, 0.3, 0.06, 0.2, 0xffd43b, {yOff:0.74, noCollide:true}); // ノート
+warmLamp(0.9, 1.3, 8.4, 0xfff0cc, 0.35, 5);
+// 窓から差し込む光
+(function(){
+  const win = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.2, 1.4),
+    new THREE.MeshBasicMaterial({color:0xb8e0ff, transparent:true, opacity:0.85})
+  );
+  win.position.set(0.12, 1.8, 10);
+  win.rotation.y = Math.PI/2;
+  scene.add(win);
+  const winLight = new THREE.PointLight(0xdceeff, 0.9, 9);
+  winLight.position.set(0.5, 1.8, 10);
+  scene.add(winLight);
+})();
+
+// --- 浴室 ---
+furniture(8.1, 11, 1.7, 0.6, 1.0, 0xf0ffff, {rough:0.2}); // 浴槽
+furniture(9.3, 7.7, 0.7, 0.85, 0.5, 0xf8ffff, {rough:0.2}); // 洗面台
+warmLamp(8.5, 2.5, 9.4, 0xe8f8ff, 0.4, 5);
+
+// --- 書斎 ---
+furniture(14.8, 7.9, 1.8, 0.75, 0.7, 0xd4a96a);     // 机
+furniture(14.8, 7.55, 1.6, 1.3, 0.15, 0x88c9ff, {yOff:0.75, noCollide:true}); // モニタ
+furniture(11.2, 10.5, 0.9, 2.1, 2.0, 0xc9a66b);     // 本棚
+warmLamp(14.8, 2.3, 8.7, 0xfff4d0, 0.35, 5);
+
+/* ================= コレクタブル ================= */
+const collectItems = [
+  {x:2.0, z:1.4, room:'living'},
+  {x:13.5, z:4.6, room:'kitchen'},
+  {x:8.0, z:6.5, room:'hallway'},
+  {x:4.6, z:11.2, room:'bedroom'},
+  {x:8.6, z:9.5, room:'bathroom'},
+  {x:12.6, z:11.3, room:'study'}
+];
+const itemMeshes = [];
+const itemGeo = new THREE.IcosahedronGeometry(0.22, 0);
+const itemColors = [0xff6b6b, 0x4dabf7, 0xffd43b, 0xff922b, 0x69db7c, 0xcc5de8];
+collectItems.forEach((it, i)=>{
+  const c = itemColors[i % itemColors.length];
+  const m = new THREE.Mesh(itemGeo, new THREE.MeshStandardMaterial({
+    color:c, emissive:c, emissiveIntensity:0.35, roughness:0.35, metalness:0.15
+  }));
+  m.position.set(it.x, 1.0, it.z);
+  m.userData.baseY = 1.0;
+  m.userData.collected = false;
+  scene.add(m);
+  const glow = new THREE.PointLight(c, 0.25, 3);
+  glow.position.copy(m.position);
+  scene.add(glow);
+  itemMeshes.push({mesh:m, glow, collected:false});
+});
+let collectedCount = 0;
+const TOTAL_ITEMS = collectItems.length;
+document.getElementById('itemTotal').textContent = TOTAL_ITEMS;
+
+function showToast(text){
+  const t = document.getElementById('toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(()=>t.classList.remove('show'), 1600);
+}
+
+/* ================= iOS / タッチ基盤 ================= */
+if (isTouchPreferred){
+  document.getElementById('controlHelpDesktop').style.display = 'none';
+  document.getElementById('controlHelpTouch').style.display = 'block';
+}
+
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e)=>{
+  const now = Date.now();
+  if (now - lastTouchEnd <= 300) e.preventDefault();
+  lastTouchEnd = now;
+}, {passive:false});
+document.addEventListener('touchmove', (e)=>{
+  if (e.target.closest('.overlay, .game-btn, .dpad')) return;
+  e.preventDefault();
+}, {passive:false});
+document.addEventListener('dblclick', e=>e.preventDefault());
+document.addEventListener('contextmenu', e=>e.preventDefault());
+document.addEventListener('selectstart', e=>e.preventDefault());
+document.addEventListener('dragstart', e=>e.preventDefault());
+
+let audioCtx = null;
+function unlockAudio(){
+  if (!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const buffer = audioCtx.createBuffer(1, 1, 22050);
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioCtx.destination);
+    source.start(0);
+  } else if (audioCtx.state === 'suspended'){
+    audioCtx.resume();
+  }
+}
+function playTapSound(){
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = 880;
+  gain.gain.value = 0.08;
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+  osc.stop(audioCtx.currentTime + 0.08);
+}
+function hapticTap(){
+  if (navigator.vibrate) navigator.vibrate(15);
+}
+
+function bindPointer(el, codes){
+  if (!el) return;
+  const press = (e)=>{
+    e.preventDefault();
+    if (el.setPointerCapture) el.setPointerCapture(e.pointerId);
+    el.classList.add('is-pressed');
+    codes.forEach(c=>{ keys[c] = true; });
+    unlockAudio();
+  };
+  const release = (e)=>{
+    if (el.hasPointerCapture && el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+    el.classList.remove('is-pressed');
+    codes.forEach(c=>{ keys[c] = false; });
+  };
+  el.addEventListener('pointerdown', press);
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  el.addEventListener('pointerleave', release);
+}
+
+function bindTap(el, handler){
+  if (!el) return;
+  let handled = false;
+  const run = (e)=>{
+    if (handled) return;
+    handled = true;
+    setTimeout(()=>{ handled = false; }, 250);
+    el.classList.add('is-pressed');
+    hapticTap();
+    unlockAudio();
+    handler(e);
+  };
+  const release = ()=> el.classList.remove('is-pressed');
+  el.addEventListener('pointerdown', run);
+  el.addEventListener('click', (e)=>{ e.preventDefault(); run(e); });
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+}
+
+bindPointer(document.getElementById('cv-up'), ['ArrowUp']);
+bindPointer(document.getElementById('cv-left'), ['ArrowLeft']);
+bindPointer(document.getElementById('cv-right'), ['ArrowRight']);
+bindPointer(document.getElementById('cv-down'), ['ArrowDown']);
+
+const virtualControls = document.getElementById('virtual-controls');
+const pauseOverlay = document.getElementById('pauseOverlay');
+let gameActive = false;
+const touchSensitivity = 0.0048;
+let lookTouchId = null;
+let lastLookX = 0;
+let lastLookY = 0;
+
+function isControlTarget(target){
+  return Boolean(target && target.closest('.overlay, .game-btn, .dpad, #virtual-controls button, #hud, #minimapWrap'));
+}
+
+canvas.addEventListener('touchstart', (e)=>{
+  if (!gameActive || pauseOverlay.style.display === 'flex') return;
+  for (const t of e.changedTouches){
+    if (isControlTarget(e.target)) continue;
+    if (t.clientX >= window.innerWidth * 0.42){
+      lookTouchId = t.identifier;
+      lastLookX = t.clientX;
+      lastLookY = t.clientY;
+      break;
+    }
+  }
+}, {passive:false});
+
+canvas.addEventListener('touchmove', (e)=>{
+  if (lookTouchId === null) return;
+  for (const t of e.changedTouches){
+    if (t.identifier !== lookTouchId) continue;
+    const dx = t.clientX - lastLookX;
+    const dy = t.clientY - lastLookY;
+    player.yaw   -= dx * touchSensitivity;
+    player.pitch -= dy * touchSensitivity;
+    player.pitch = Math.max(-1.3, Math.min(1.3, player.pitch));
+    lastLookX = t.clientX;
+    lastLookY = t.clientY;
+    e.preventDefault();
+  }
+}, {passive:false});
+
+function clearLookTouch(){
+  lookTouchId = null;
+}
+canvas.addEventListener('touchend', clearLookTouch);
+canvas.addEventListener('touchcancel', clearLookTouch);
+
+/* ================= プレイヤー / 操作 ================= */
+const player = { x:4, z:1, yaw:Math.PI, pitch:0 };
+const PLAYER_RADIUS = 0.32;
+const keys = {};
+let sensitivity = 0.0022;
+let paused = false;
+
+document.addEventListener('keydown', e=>{
+  keys[e.code] = true;
+  if (e.code === 'Escape') togglePause(true);
+});
+document.addEventListener('keyup', e=>{ keys[e.code] = false; });
+
+function onMouseMove(e){
+  if (document.pointerLockElement !== canvas) return;
+  player.yaw   -= e.movementX * sensitivity;
+  player.pitch -= e.movementY * sensitivity;
+  player.pitch = Math.max(-1.3, Math.min(1.3, player.pitch));
+}
+document.addEventListener('mousemove', onMouseMove);
+
+function playerIsMoving(){
+  return keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']||
+         keys['ArrowUp']||keys['ArrowDown']||keys['ArrowLeft']||keys['ArrowRight'];
+}
+
+function canControl(){
+  if (!gameActive || paused) return false;
+  if (isTouchPreferred) return true;
+  return document.pointerLockElement === canvas;
+}
+
+function resolveCollision(x,z){
+  for (const c of colliders){
+    const cx = Math.max(c.minX, Math.min(x, c.maxX));
+    const cz = Math.max(c.minZ, Math.min(z, c.maxZ));
+    const dx = x-cx, dz = z-cz;
+    const distSq = dx*dx+dz*dz;
+    if (distSq < PLAYER_RADIUS*PLAYER_RADIUS){
+      const dist = Math.sqrt(distSq);
+      if (dist > 0.0001){
+        const overlap = PLAYER_RADIUS - dist;
+        x += (dx/dist)*overlap;
+        z += (dz/dist)*overlap;
+      } else {
+        // 中に埋まっている場合は最も近い面へ押し出す
+        const pushes = [c.minX-x, c.maxX-x, c.minZ-z, c.maxZ-z];
+        // fallback: 何もしない（稀なケース）
+      }
+    }
+  }
+  x = Math.max(0.3, Math.min(15.7, x));
+  z = Math.max(0.3, Math.min(11.7, z));
+  return [x,z];
+}
+
+/* ================= ミニマップ ================= */
+const mmCanvas = document.getElementById('minimap');
+const mmCtx = mmCanvas.getContext('2d');
+const MM_SCALE = mmCanvas.width/16;
+function drawMinimap(){
+  mmCtx.clearRect(0,0,mmCanvas.width, mmCanvas.height);
+  mmCtx.fillStyle = 'rgba(80,60,30,0.08)';
+  mmCtx.fillRect(0,0,mmCanvas.width, 12*MM_SCALE);
+  mmCtx.strokeStyle = 'rgba(80,60,30,0.35)';
+  mmCtx.lineWidth = 1;
+  colliders.forEach(c=>{
+    mmCtx.strokeRect(c.minX*MM_SCALE, c.minZ*MM_SCALE, (c.maxX-c.minX)*MM_SCALE, (c.maxZ-c.minZ)*MM_SCALE);
+  });
+  itemMeshes.forEach(it=>{
+    mmCtx.fillStyle = it.collected ? 'rgba(80,60,30,0.2)' : '#ff922b';
+    mmCtx.beginPath();
+    mmCtx.arc(it.mesh.position.x*MM_SCALE, it.mesh.position.z*MM_SCALE, 3, 0, Math.PI*2);
+    mmCtx.fill();
+  });
+  // player
+  const px = player.x*MM_SCALE, pz = player.z*MM_SCALE;
+  mmCtx.fillStyle = '#228be6';
+  mmCtx.beginPath();
+  mmCtx.arc(px, pz, 4, 0, Math.PI*2);
+  mmCtx.fill();
+  mmCtx.strokeStyle = '#228be6';
+  mmCtx.beginPath();
+  mmCtx.moveTo(px,pz);
+  mmCtx.lineTo(px - Math.sin(player.yaw)*10, pz - Math.cos(player.yaw)*10);
+  mmCtx.stroke();
+}
+
+/* ================= ゲームフロー ================= */
+const startOverlay = document.getElementById('startOverlay');
+const winOverlay = document.getElementById('winOverlay');
+const hud = document.getElementById('hud');
+const crosshair = document.getElementById('crosshair');
+const minimapWrap = document.getElementById('minimapWrap');
+
+function requestLock(){
+  if (!isTouchPreferred) canvas.requestPointerLock();
+}
+
+function beginGame(){
+  startOverlay.style.display = 'none';
+  hud.style.display = 'block';
+  crosshair.style.display = 'block';
+  minimapWrap.style.display = 'block';
+  canvas.style.display = 'block';
+  if (isTouchPreferred){
+    virtualControls.classList.remove('hidden');
+    virtualControls.setAttribute('aria-hidden', 'false');
+  }
+  gameActive = true;
+  paused = false;
+  pauseOverlay.style.display = 'none';
+  unlockAudio();
+  requestLock();
+}
+
+bindTap(document.getElementById('startBtn'), beginGame);
+bindTap(document.getElementById('resumeBtn'), ()=>{
+  paused = false;
+  pauseOverlay.style.display = 'none';
+  requestLock();
+});
+bindTap(document.getElementById('restartBtn'), ()=> location.reload());
+bindTap(document.getElementById('pauseBtn'), ()=> togglePause(true));
+
+function togglePause(toPaused){
+  if (!gameActive || collectedCount >= TOTAL_ITEMS) return;
+  paused = toPaused !== false;
+  if (paused){
+    exitPointerLock();
+    pauseOverlay.style.display = 'flex';
+  } else {
+    pauseOverlay.style.display = 'none';
+    requestLock();
+  }
+}
+
+document.addEventListener('pointerlockchange', ()=>{
+  if (isTouchPreferred) return;
+  if (document.pointerLockElement === canvas){
+    paused = false;
+    pauseOverlay.style.display = 'none';
+    gameActive = true;
+  } else if (gameActive && collectedCount < TOTAL_ITEMS && !paused){
+    pauseOverlay.style.display = 'flex';
+  }
+});
+function exitPointerLock(){
+  if (document.pointerLockElement === canvas) document.exitPointerLock();
+}
+
+/* ================= メインループ ================= */
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  if (canControl()){
+    const forward = (keys['KeyW']||keys['ArrowUp'] ? 1:0) - (keys['KeyS']||keys['ArrowDown'] ? 1:0);
+    const strafe  = (keys['KeyD']||keys['ArrowRight'] ? 1:0) - (keys['KeyA']||keys['ArrowLeft'] ? 1:0);
+    if (forward || strafe){
+      const speed = 3.2;
+      const sinY = Math.sin(player.yaw), cosY = Math.cos(player.yaw);
+      let mx = (-sinY*forward + cosY*strafe);
+      let mz = (-cosY*forward - sinY*strafe);
+      const len = Math.hypot(mx,mz) || 1;
+      mx = mx/len*speed*dt; mz = mz/len*speed*dt;
+      let [nx,nz] = resolveCollision(player.x+mx, player.z+mz);
+      player.x = nx; player.z = nz;
+    }
+  }
+
+  camera.position.set(player.x, 1.6 + Math.sin(t*6)*(gameActive && playerIsMoving()?0.015:0), player.z);
+  camera.rotation.y = player.yaw;
+  camera.rotation.x = player.pitch;
+
+  // コレクタブルのアニメーション & 取得判定
+  itemMeshes.forEach(it=>{
+    if (it.collected) return;
+    it.mesh.rotation.y += dt*1.6;
+    it.mesh.position.y = it.mesh.userData.baseY + Math.sin(t*2 + it.mesh.position.x)*0.08;
+    it.glow.position.copy(it.mesh.position);
+    const dx = player.x - it.mesh.position.x, dz = player.z - it.mesh.position.z;
+    if (Math.hypot(dx,dz) < 0.85){
+      it.collected = true;
+      it.mesh.visible = false;
+      it.glow.visible = false;
+      collectedCount++;
+      document.getElementById('itemCount').textContent = collectedCount;
+      hapticTap();
+      playTapSound();
+      showToast('📦 大切なものを見つけた！ (' + collectedCount + '/' + TOTAL_ITEMS + ')');
+      if (collectedCount >= TOTAL_ITEMS){
+        setTimeout(()=>{
+          paused = true;
+          exitPointerLock();
+          virtualControls.classList.add('hidden');
+          winOverlay.style.display = 'flex';
+          gameActive = false;
+        }, 500);
+      }
+    }
+  });
+
+  drawMinimap();
+  renderer.render(scene, camera);
+}
+animate();
+
+})();
+</script>
+</body>
+</html>
